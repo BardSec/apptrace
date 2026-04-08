@@ -10,6 +10,7 @@ import {
 } from "lucide-react";
 import { UploadForm } from "@/components/ingestion/upload-form";
 import { ReclassifyButton } from "@/components/ingestion/reclassify-button";
+import { SecurlyUpload } from "@/components/ingestion/securly-upload";
 import { ConfidenceDisclaimer } from "@/components/ui/confidence-disclaimer";
 
 function formatNumber(n: number) {
@@ -106,11 +107,14 @@ export default async function IngestionPage() {
         </p>
       </div>
 
-      {/* Upload section */}
-      <UploadForm schools={schools} />
+      {/* Securly import — primary ingestion method */}
+      <SecurlyUpload />
 
       {/* Re-classify section */}
       <ReclassifyButton />
+
+      {/* Generic upload — secondary */}
+      <UploadForm schools={schools} />
 
       {/* Summary cards */}
       <div className="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-3">
