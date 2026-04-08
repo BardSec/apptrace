@@ -203,10 +203,10 @@ export default async function ReviewPage() {
                 </td>
                 <td className="px-4 py-3">
                   <Link
-                    href={`/apps/${app.id}`}
-                    className="inline-flex items-center gap-1 text-xs text-indigo-600 hover:text-indigo-800"
+                    href={`/apps/${app.id}?from=review&action=review#review-section`}
+                    className="inline-flex items-center gap-1 rounded-md bg-indigo-50 px-2.5 py-1.5 text-xs font-medium text-indigo-600 hover:bg-indigo-100"
                   >
-                    Review
+                    Open Review
                     <ArrowRight className="h-3 w-3" />
                   </Link>
                 </td>

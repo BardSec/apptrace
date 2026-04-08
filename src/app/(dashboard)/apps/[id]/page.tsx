@@ -11,6 +11,7 @@ import {
 } from "date-fns";
 import {
   ArrowLeft,
+  ArrowRight,
   Eye,
   Users,
   School,
@@ -145,9 +146,13 @@ function getGradeBand(gradeName: string): string {
 
 export default async function AppDetailPage({
   params,
+  searchParams,
 }: {
   params: { id: string };
+  searchParams: { from?: string; action?: string };
 }) {
+  const fromReview = searchParams.from === "review";
+  const autoOpenReview = searchParams.action === "review";
   const app = await prisma.webApp.findUnique({
     where: { id: params.id },
     include: {
@@ -357,16 +362,72 @@ export default async function AppDetailPage({
     s.sourceType.replace(/_/g, " ")
   );
 
+  // If coming from review queue, find prev/next apps in queue
+  let prevAppId: string | null = null;
+  let nextAppId: string | null = null;
+  if (fromReview) {
+    const queueApps = await prisma.webApp.findMany({
+      where: { approvalStatus: { in: ["PENDING_REVIEW", "UNKNOWN"] } },
+      orderBy: { riskScore: "desc" },
+      select: { id: true },
+    });
+    const idx = queueApps.findIndex((a) => a.id === app.id);
+    if (idx > 0) prevAppId = queueApps[idx - 1].id;
+    if (idx >= 0 && idx < queueApps.length - 1) nextAppId = queueApps[idx + 1].id;
+  }
+
   return (
     <div className="p-6">
-      {/* Back link */}
-      <Link
-        href="/apps"
-        className="mb-4 inline-flex items-center gap-1.5 text-sm text-slate-500 hover:text-slate-700"
-      >
-        <ArrowLeft className="h-4 w-4" />
-        Back to Discovered Apps
-      </Link>
+      {/* Navigation bar */}
+      {fromReview ? (
+        <div className="mb-4 flex items-center justify-between">
+          <Link
+            href="/review"
+            className="inline-flex items-center gap-1.5 text-sm text-indigo-600 hover:text-indigo-800"
+          >
+            <ArrowLeft className="h-4 w-4" />
+            Back to Review Queue
+          </Link>
+          <div className="flex items-center gap-3">
+            {prevAppId ? (
+              <Link
+                href={`/apps/${prevAppId}?from=review&action=review#review-section`}
+                className="inline-flex items-center gap-1 rounded-md border border-slate-200 px-3 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-50"
+              >
+                <ArrowLeft className="h-3 w-3" />
+                Previous
+              </Link>
+            ) : (
+              <span className="inline-flex items-center gap-1 rounded-md border border-slate-100 px-3 py-1.5 text-xs text-slate-300">
+                <ArrowLeft className="h-3 w-3" />
+                Previous
+              </span>
+            )}
+            {nextAppId ? (
+              <Link
+                href={`/apps/${nextAppId}?from=review&action=review#review-section`}
+                className="inline-flex items-center gap-1 rounded-md border border-slate-200 px-3 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-50"
+              >
+                Next
+                <ArrowRight className="h-3 w-3" />
+              </Link>
+            ) : (
+              <span className="inline-flex items-center gap-1 rounded-md border border-slate-100 px-3 py-1.5 text-xs text-slate-300">
+                Next
+                <ArrowRight className="h-3 w-3" />
+              </span>
+            )}
+          </div>
+        </div>
+      ) : (
+        <Link
+          href="/apps"
+          className="mb-4 inline-flex items-center gap-1.5 text-sm text-slate-500 hover:text-slate-700"
+        >
+          <ArrowLeft className="h-4 w-4" />
+          Back to Discovered Apps
+        </Link>
+      )}
 
       {/* Header */}
       <div className="mb-6 rounded-lg border border-slate-200 bg-white p-6">
@@ -396,8 +457,8 @@ export default async function AppDetailPage({
         </div>
 
         {/* Action bar */}
-        <div className="mt-5 border-t border-slate-200 pt-5">
-          <AppActions appId={app.id} currentStatus={app.approvalStatus} />
+        <div id="review-section" className="mt-5 border-t border-slate-200 pt-5">
+          <AppActions appId={app.id} currentStatus={app.approvalStatus} autoOpenReview={autoOpenReview} />
         </div>
       </div>
 

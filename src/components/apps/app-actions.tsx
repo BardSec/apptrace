@@ -30,13 +30,15 @@ const STATUS_LABELS: Record<string, string> = {
 export function AppActions({
   appId,
   currentStatus,
+  autoOpenReview = false,
 }: {
   appId: string;
   currentStatus: string;
+  autoOpenReview?: boolean;
 }) {
   const router = useRouter();
   const [loading, setLoading] = useState<string | null>(null);
-  const [showReviewForm, setShowReviewForm] = useState(false);
+  const [showReviewForm, setShowReviewForm] = useState(autoOpenReview);
 
   async function updateStatus(status: string) {
     setLoading(status);
