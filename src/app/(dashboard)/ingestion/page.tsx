@@ -11,6 +11,7 @@ import {
 import { UploadForm } from "@/components/ingestion/upload-form";
 import { ReclassifyButton } from "@/components/ingestion/reclassify-button";
 import { SecurlyUpload } from "@/components/ingestion/securly-upload";
+import { PaloAltoUpload } from "@/components/ingestion/paloalto-upload";
 import { ConfidenceDisclaimer } from "@/components/ui/confidence-disclaimer";
 
 function formatNumber(n: number) {
@@ -109,6 +110,9 @@ export default async function IngestionPage() {
 
       {/* Securly import — primary ingestion method */}
       <SecurlyUpload />
+
+      {/* Palo Alto NGFW import */}
+      <PaloAltoUpload />
 
       {/* Re-classify section */}
       <ReclassifyButton />
