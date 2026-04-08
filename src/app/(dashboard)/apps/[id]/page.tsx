@@ -16,6 +16,7 @@ import {
   AlertTriangle,
   Info,
 } from "lucide-react";
+import { AppActions } from "@/components/apps/app-actions";
 
 function formatNumber(n: number) {
   return new Intl.NumberFormat("en-US").format(n);
@@ -180,7 +181,6 @@ export default async function AppDetailPage({
             </div>
             <div className="mt-3 flex flex-wrap items-center gap-2">
               {categoryBadge(app.category)}
-              {statusBadge(app.approvalStatus)}
             </div>
             {app.description && (
               <p className="mt-3 max-w-2xl text-sm text-slate-600">
@@ -189,6 +189,11 @@ export default async function AppDetailPage({
             )}
           </div>
           <div>{riskGauge(app.riskScore)}</div>
+        </div>
+
+        {/* Action bar */}
+        <div className="mt-5 border-t border-slate-200 pt-5">
+          <AppActions appId={app.id} currentStatus={app.approvalStatus} />
         </div>
       </div>
 

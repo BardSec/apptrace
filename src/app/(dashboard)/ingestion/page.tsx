@@ -8,6 +8,7 @@ import {
   Info,
   Database,
 } from "lucide-react";
+import { UploadForm } from "@/components/ingestion/upload-form";
 
 function formatNumber(n: number) {
   return new Intl.NumberFormat("en-US").format(n);
@@ -40,13 +41,12 @@ export default async function IngestionPage() {
   const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
   const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
 
-  // Get counts and latest observation per source type
-  const [countsBySource, latestBySource] = await Promise.all([
+  // Get counts, latest observation per source type, and schools
+  const [countsBySource, latestBySource, schools] = await Promise.all([
     prisma.observation.groupBy({
       by: ["sourceType"],
       _count: { id: true },
     }),
-    // Get the latest observation per source type
     Promise.all(
       ALL_SOURCES.map(async (source) => {
         const latest = await prisma.observation.findFirst({
@@ -57,6 +57,10 @@ export default async function IngestionPage() {
         return { sourceType: source, latest };
       })
     ),
+    prisma.school.findMany({
+      select: { id: true, name: true },
+      orderBy: { name: "asc" },
+    }),
   ]);
 
   const countsMap = new Map(
@@ -99,6 +103,9 @@ export default async function IngestionPage() {
           Data source connections and ingestion pipeline status.
         </p>
       </div>
+
+      {/* Upload section */}
+      <UploadForm schools={schools} />
 
       {/* Summary cards */}
       <div className="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-3">

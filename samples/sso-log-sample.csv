@@ -1,0 +1,31 @@
+timestamp,user_email,app_name,event_type,domain
+2026-03-15T08:00:12Z,maria.garcia@students.example.org,Google Classroom,login,classroom.google.com
+2026-03-15T08:01:30Z,james.wilson@students.example.org,Clever,login,clever.com
+2026-03-15T08:02:45Z,aisha.patel@students.example.org,Khan Academy,login,www.khanacademy.org
+2026-03-15T08:05:00Z,carlos.martinez@students.example.org,Kahoot!,login,kahoot.it
+2026-03-15T08:06:15Z,emma.johnson@students.example.org,Quizlet,login,quizlet.com
+2026-03-15T08:08:30Z,liam.brown@students.example.org,Nearpod,login,nearpod.com
+2026-03-15T08:10:42Z,sophia.lee@students.example.org,Canvas LMS,login,canvas.instructure.com
+2026-03-15T08:12:00Z,noah.davis@students.example.org,Edpuzzle,login,edpuzzle.com
+2026-03-15T08:15:22Z,olivia.thomas@students.example.org,IXL,login,www.ixl.com
+2026-03-15T08:18:33Z,ethan.anderson@students.example.org,Seesaw,login,app.seesaw.me
+2026-03-15T08:20:45Z,maria.garcia@students.example.org,Google Docs,login,docs.google.com
+2026-03-15T08:23:00Z,james.wilson@students.example.org,Desmos,login,student.desmos.com
+2026-03-15T08:25:12Z,aisha.patel@students.example.org,Prodigy Math,login,play.prodigygame.com
+2026-03-15T08:28:30Z,carlos.martinez@students.example.org,BrainPOP,login,www.brainpop.com
+2026-03-15T08:30:42Z,emma.johnson@students.example.org,Schoology,login,app.schoology.com
+2026-03-15T08:33:00Z,liam.brown@students.example.org,Book Creator,login,app.bookcreator.com
+2026-03-15T08:35:15Z,sophia.lee@students.example.org,Newsela,login,www.newsela.com
+2026-03-15T08:38:30Z,noah.davis@students.example.org,Formative,login,app.formative.com
+2026-03-15T08:40:42Z,olivia.thomas@students.example.org,NoRedInk,login,www.noredink.com
+2026-03-15T08:43:00Z,ethan.anderson@students.example.org,Code.org,login,studio.code.org
+2026-03-15T09:00:15Z,maria.garcia@students.example.org,Google Classroom,logout,classroom.google.com
+2026-03-15T09:02:30Z,james.wilson@students.example.org,Clever,logout,clever.com
+2026-03-15T09:05:42Z,aisha.patel@students.example.org,Khan Academy,logout,www.khanacademy.org
+2026-03-15T09:08:00Z,carlos.martinez@students.example.org,Kahoot!,logout,kahoot.it
+2026-03-15T09:10:15Z,emma.johnson@students.example.org,Quizlet,logout,quizlet.com
+2026-03-15T09:12:30Z,liam.brown@students.example.org,Duolingo,login,www.duolingo.com
+2026-03-15T09:15:42Z,sophia.lee@students.example.org,Scratch,login,scratch.mit.edu
+2026-03-15T09:18:00Z,noah.davis@students.example.org,Canva,login,canva.com
+2026-03-15T09:20:15Z,olivia.thomas@students.example.org,Zoom,login,zoom.us
+2026-03-15T09:22:30Z,ethan.anderson@students.example.org,Pear Deck,login,app.peardeck.com

@@ -9,6 +9,7 @@ import {
   HelpCircle,
   ArrowRight,
 } from "lucide-react";
+import { QuickActions } from "@/components/review/quick-actions";
 
 function formatNumber(n: number) {
   return new Intl.NumberFormat("en-US").format(n);
@@ -127,6 +128,9 @@ export default async function ReviewPage() {
               <th className="px-4 py-3 text-right font-medium text-slate-600">
                 Obs.
               </th>
+              <th className="px-4 py-3 font-medium text-slate-600">
+                Quick Actions
+              </th>
               <th className="px-4 py-3"></th>
             </tr>
           </thead>
@@ -184,6 +188,9 @@ export default async function ReviewPage() {
                 </td>
                 <td className="px-4 py-3 text-right text-slate-700">
                   {formatNumber(app._count.observations)}
+                </td>
+                <td className="px-4 py-3">
+                  <QuickActions appId={app.id} />
                 </td>
                 <td className="px-4 py-3">
                   <Link
