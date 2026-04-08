@@ -1,0 +1,43 @@
+services:
+  postgres:
+    image: postgres:16
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: apptrace
+      POSTGRES_USER: apptrace
+      POSTGRES_PASSWORD: apptrace
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U apptrace"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  app:
+    build: .
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      DATABASE_URL: postgresql://apptrace:apptrace@postgres:5432/apptrace
+      NEXTAUTH_SECRET: change-me-in-production
+      NEXTAUTH_URL: http://localhost:3000
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  migrate-and-seed:
+    build: .
+    environment:
+      DATABASE_URL: postgresql://apptrace:apptrace@postgres:5432/apptrace
+    depends_on:
+      postgres:
+        condition: service_healthy
+    entrypoint: ["sh", "-c", "npx prisma migrate deploy && npx tsx prisma/seed.ts"]
+    restart: "no"
+    profiles:
+      - setup
+
+volumes:
+  pgdata:
