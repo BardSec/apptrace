@@ -9,6 +9,7 @@ import {
   Database,
 } from "lucide-react";
 import { UploadForm } from "@/components/ingestion/upload-form";
+import { ReclassifyButton } from "@/components/ingestion/reclassify-button";
 
 function formatNumber(n: number) {
   return new Intl.NumberFormat("en-US").format(n);
@@ -106,6 +107,9 @@ export default async function IngestionPage() {
 
       {/* Upload section */}
       <UploadForm schools={schools} />
+
+      {/* Re-classify section */}
+      <ReclassifyButton />
 
       {/* Summary cards */}
       <div className="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-3">

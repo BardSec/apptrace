@@ -1,11 +1,12 @@
 /**
  * Domain-to-App normalization.
  * Maps raw domains to canonical application identities.
- * Enhanced with DB-backed matching and unknown app creation.
+ * Enhanced with DB-backed matching, rule-based matching, and unknown app creation.
  */
 
 import { prisma } from "@/lib/prisma";
 import { DOMAIN_RULES, type DomainRule } from "./domain-rules";
+import { type AppCategory, type DomainType } from "@prisma/client";
 
 export interface NormalizedApp {
   canonicalName: string;
@@ -66,39 +67,143 @@ export function extractBaseDomain(domain: string): string {
 }
 
 /**
+ * In-memory cache scoped to the request lifecycle.
+ * Prevents repeated DB lookups for the same domain within a single ingestion batch.
+ */
+const requestCache = new Map<string, string | null>();
+
+/**
+ * Clear the request-scoped cache. Call this at the start of each request.
+ */
+export function clearDomainCache(): void {
+  requestCache.clear();
+}
+
+/**
+ * Find a matching DomainRule for the given domain.
+ */
+function findMatchingRule(domain: string): DomainRule | null {
+  const cleaned = domain.toLowerCase().trim();
+  return DOMAIN_RULES.find((r) => r.pattern.test(cleaned)) ?? null;
+}
+
+/**
  * Matches a domain to an existing DomainAlias -> WebApp in the database.
- * Returns the webAppId if found, null otherwise.
+ * Falls back to domain-rules.ts patterns if no DB match is found.
+ * If a rule matches but no WebApp exists, auto-creates the WebApp.
+ * Returns the webAppId if found or created, null otherwise.
  */
 export async function matchDomain(domain: string): Promise<string | null> {
   const cleaned = domain.toLowerCase().trim();
 
-  // Direct lookup
+  // Check in-memory cache first
+  if (requestCache.has(cleaned)) {
+    return requestCache.get(cleaned) ?? null;
+  }
+
+  // 1. Direct DB lookup
   const alias = await prisma.domainAlias.findUnique({
     where: { domain: cleaned },
     select: { webAppId: true },
   });
-  if (alias) return alias.webAppId;
+  if (alias) {
+    requestCache.set(cleaned, alias.webAppId);
+    return alias.webAppId;
+  }
 
-  // Try base domain
+  // 2. Try base domain in DB
   const base = extractBaseDomain(cleaned);
   if (base !== cleaned) {
     const baseAlias = await prisma.domainAlias.findUnique({
       where: { domain: base },
       select: { webAppId: true },
     });
-    if (baseAlias) return baseAlias.webAppId;
+    if (baseAlias) {
+      requestCache.set(cleaned, baseAlias.webAppId);
+      return baseAlias.webAppId;
+    }
   }
 
-  // Try matching via primary domain on WebApp
+  // 3. Try matching via primary domain on WebApp
   const app = await prisma.webApp.findFirst({
     where: {
       OR: [{ primaryDomain: cleaned }, { primaryDomain: base }],
     },
     select: { id: true },
   });
-  if (app) return app.id;
+  if (app) {
+    requestCache.set(cleaned, app.id);
+    return app.id;
+  }
 
+  // 4. Check domain-rules.ts patterns
+  const rule = findMatchingRule(cleaned);
+  if (rule) {
+    // Look for an existing WebApp with this canonical app name
+    const existingApp = await prisma.webApp.findFirst({
+      where: { name: rule.appName },
+      select: { id: true },
+    });
+
+    if (existingApp) {
+      // Create domain alias linking to existing app
+      await prisma.domainAlias
+        .create({
+          data: {
+            domain: base,
+            webAppId: existingApp.id,
+            isPrimary: false,
+            isCanonical: false,
+            domainType: rule.domainType,
+          },
+        })
+        .catch(() => {
+          // Ignore unique constraint violation
+        });
+      requestCache.set(cleaned, existingApp.id);
+      return existingApp.id;
+    }
+
+    // Auto-create WebApp from rule metadata
+    const newApp = await createAppFromRule(base, rule);
+    requestCache.set(cleaned, newApp);
+    return newApp;
+  }
+
+  // No match found
+  requestCache.set(cleaned, null);
   return null;
+}
+
+/**
+ * Creates a WebApp from a domain rule with proper metadata.
+ */
+async function createAppFromRule(
+  baseDomain: string,
+  rule: DomainRule
+): Promise<string> {
+  const now = new Date();
+
+  const app = await prisma.webApp.create({
+    data: {
+      name: rule.appName,
+      primaryDomain: baseDomain,
+      category: rule.category as AppCategory,
+      approvalStatus: "UNKNOWN",
+      firstSeenAt: now,
+      lastSeenAt: now,
+      domainAliases: {
+        create: {
+          domain: baseDomain,
+          isPrimary: true,
+          isCanonical: true,
+          domainType: rule.domainType as DomainType,
+        },
+      },
+    },
+  });
+
+  return app.id;
 }
 
 /**
@@ -138,18 +243,23 @@ export async function createUnknownApp(domain: string): Promise<string> {
 
   // If the original domain is different from the base, also create an alias for it
   if (cleaned !== base) {
-    await prisma.domainAlias.create({
-      data: {
-        domain: cleaned,
-        webAppId: app.id,
-        isPrimary: false,
-        isCanonical: false,
-        domainType: "UNKNOWN",
-      },
-    }).catch(() => {
-      // Ignore if alias already exists (unique constraint)
-    });
+    await prisma.domainAlias
+      .create({
+        data: {
+          domain: cleaned,
+          webAppId: app.id,
+          isPrimary: false,
+          isCanonical: false,
+          domainType: "UNKNOWN",
+        },
+      })
+      .catch(() => {
+        // Ignore if alias already exists (unique constraint)
+      });
   }
+
+  // Cache the result
+  requestCache.set(cleaned, app.id);
 
   return app.id;
 }

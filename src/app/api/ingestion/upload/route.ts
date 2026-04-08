@@ -5,7 +5,9 @@ import {
   matchDomain,
   createUnknownApp,
   extractBaseDomain,
+  clearDomainCache,
 } from "@/services/normalization";
+import { classifyApp } from "@/services/classification";
 
 // --- Types ---
 
@@ -310,8 +312,14 @@ export async function POST(request: NextRequest) {
     const CHUNK_SIZE = 100;
     const dataLines = lines.slice(1);
 
+    // Clear and use the normalization request cache
+    clearDomainCache();
+
     // Cache domain lookups to avoid repeated DB queries
     const domainCache = new Map<string, string | null>();
+
+    // Track all webAppIds touched during this upload for classification
+    const touchedWebAppIds = new Set<string>();
 
     for (let i = 0; i < dataLines.length; i += CHUNK_SIZE) {
       const chunk = dataLines.slice(i, i + CHUNK_SIZE);
@@ -351,6 +359,11 @@ export async function POST(request: NextRequest) {
             result.matched++;
           }
           domainCache.set(baseDomain, webAppId);
+        }
+
+        // Track touched webAppIds for classification
+        if (webAppId) {
+          touchedWebAppIds.add(webAppId);
         }
 
         // If domain was cached, we still need to count matched/unmatched
@@ -408,13 +421,16 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Recalculate matched/unmatched from the cache since chunk processing skips counting for cached domains
-    // Reset and recount properly
-    let matchedDomains = 0;
-    let unmatchedDomains = 0;
-    // We already tracked matched/unmatched per unique domain above, but for rows:
-    // matched = imported - errors (rows that got a webAppId from an already-known app)
-    // The counts above are per-domain, not per-row. Let's keep the per-domain counts as-is.
+    // Run classification on all touched WebApps
+    let classified = 0;
+    for (const appId of Array.from(touchedWebAppIds)) {
+      try {
+        await classifyApp(appId);
+        classified++;
+      } catch (err) {
+        console.error(`Classification failed for app ${appId}:`, err);
+      }
+    }
 
     return NextResponse.json({
       success: true,
@@ -426,6 +442,7 @@ export async function POST(request: NextRequest) {
         unmatched: result.unmatched,
         errors: result.errors,
       },
+      classified,
     });
   } catch (error) {
     console.error("Upload error:", error);
