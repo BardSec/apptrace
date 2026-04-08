@@ -1,6 +1,7 @@
 export const dynamic = "force-dynamic";
 import { prisma } from "@/lib/prisma";
-import { CheckCircle, XCircle, Minus } from "lucide-react";
+import { CheckCircle, XCircle, Minus, Download } from "lucide-react";
+import { ConfidenceDisclaimer } from "@/components/ui/confidence-disclaimer";
 
 function formatNumber(n: number) {
   return new Intl.NumberFormat("en-US").format(n);
@@ -52,6 +53,18 @@ function complianceBadge(value: boolean | null, label: string) {
       <Minus className="h-3 w-3" />
       {label}
     </span>
+  );
+}
+
+function ExportButton({ type, label }: { type: string; label: string }) {
+  return (
+    <a
+      href={`/api/reports/export?type=${type}`}
+      className="inline-flex items-center gap-1.5 rounded-md border border-slate-300 bg-white px-2.5 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50"
+    >
+      <Download className="h-3.5 w-3.5" />
+      {label}
+    </a>
   );
 }
 
@@ -187,23 +200,36 @@ export default async function ReportsPage() {
 
   return (
     <div className="p-6">
+      <div className="mb-6 flex flex-wrap items-start justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-bold text-slate-900">Reports</h1>
+          <p className="mt-1 text-sm text-slate-500">
+            Compliance reports and data governance analytics.
+          </p>
+        </div>
+        <ExportButton type="all-apps" label="Export All Apps" />
+      </div>
+
+      {/* Confidence disclaimer */}
       <div className="mb-6">
-        <h1 className="text-2xl font-bold text-slate-900">Reports</h1>
-        <p className="mt-1 text-sm text-slate-500">
-          Compliance reports and data governance analytics.
-        </p>
+        <ConfidenceDisclaimer
+          level="medium"
+          message="Reports reflect aggregated telemetry from network-layer sources. Detection coverage varies by device type — iOS devices have more limited visibility than managed Macs."
+        />
       </div>
 
       <div className="space-y-6">
         {/* Apps by Grade Band */}
         <div className="rounded-lg border border-slate-200 bg-white">
-          <div className="border-b border-slate-200 px-5 py-4">
-            <h2 className="text-base font-semibold text-slate-900">
-              Apps by Grade Band
-            </h2>
-            <p className="mt-0.5 text-xs text-slate-500">
-              Count of distinct apps observed per grade level group.
-            </p>
+          <div className="flex items-center justify-between border-b border-slate-200 px-5 py-4">
+            <div>
+              <h2 className="text-base font-semibold text-slate-900">
+                Apps by Grade Band
+              </h2>
+              <p className="mt-0.5 text-xs text-slate-500">
+                Count of distinct apps observed per grade level group.
+              </p>
+            </div>
           </div>
           <div className="p-5">
             <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
@@ -227,13 +253,16 @@ export default async function ReportsPage() {
 
         {/* Unreviewed Apps Collecting Data */}
         <div className="rounded-lg border border-slate-200 bg-white">
-          <div className="border-b border-slate-200 px-5 py-4">
-            <h2 className="text-base font-semibold text-slate-900">
-              Unreviewed Apps Collecting Data
-            </h2>
-            <p className="mt-0.5 text-xs text-slate-500">
-              Apps marked as collecting data but not yet reviewed or approved.
-            </p>
+          <div className="flex items-center justify-between border-b border-slate-200 px-5 py-4">
+            <div>
+              <h2 className="text-base font-semibold text-slate-900">
+                Unreviewed Apps Collecting Data
+              </h2>
+              <p className="mt-0.5 text-xs text-slate-500">
+                Apps marked as collecting data but not yet reviewed or approved.
+              </p>
+            </div>
+            <ExportButton type="needs-review" label="Export CSV" />
           </div>
           {unreviewedCollecting.length > 0 ? (
             <div className="overflow-x-auto">
@@ -312,13 +341,15 @@ export default async function ReportsPage() {
 
         {/* Top 10 Most Active Apps */}
         <div className="rounded-lg border border-slate-200 bg-white">
-          <div className="border-b border-slate-200 px-5 py-4">
-            <h2 className="text-base font-semibold text-slate-900">
-              Top 10 Most Active Apps
-            </h2>
-            <p className="mt-0.5 text-xs text-slate-500">
-              By observation count in the last 30 days.
-            </p>
+          <div className="flex items-center justify-between border-b border-slate-200 px-5 py-4">
+            <div>
+              <h2 className="text-base font-semibold text-slate-900">
+                Top 10 Most Active Apps
+              </h2>
+              <p className="mt-0.5 text-xs text-slate-500">
+                By observation count in the last 30 days.
+              </p>
+            </div>
           </div>
           {topActiveApps.length > 0 ? (
             <div className="overflow-x-auto">
@@ -380,15 +411,33 @@ export default async function ReportsPage() {
           )}
         </div>
 
+        {/* High Risk Apps */}
+        <div className="rounded-lg border border-slate-200 bg-white">
+          <div className="flex items-center justify-between border-b border-slate-200 px-5 py-4">
+            <div>
+              <h2 className="text-base font-semibold text-slate-900">
+                High Risk Apps
+              </h2>
+              <p className="mt-0.5 text-xs text-slate-500">
+                Apps with a risk score above 60.
+              </p>
+            </div>
+            <ExportButton type="high-risk" label="Export CSV" />
+          </div>
+        </div>
+
         {/* Vendor Summary */}
         <div className="rounded-lg border border-slate-200 bg-white">
-          <div className="border-b border-slate-200 px-5 py-4">
-            <h2 className="text-base font-semibold text-slate-900">
-              Vendor Summary
-            </h2>
-            <p className="mt-0.5 text-xs text-slate-500">
-              Vendor name, app count, total observations, and compliance status.
-            </p>
+          <div className="flex items-center justify-between border-b border-slate-200 px-5 py-4">
+            <div>
+              <h2 className="text-base font-semibold text-slate-900">
+                Vendor Summary
+              </h2>
+              <p className="mt-0.5 text-xs text-slate-500">
+                Vendor name, app count, total observations, and compliance status.
+              </p>
+            </div>
+            <ExportButton type="vendor-summary" label="Export CSV" />
           </div>
           <div className="overflow-x-auto">
             <table className="w-full text-left text-sm">

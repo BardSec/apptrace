@@ -10,6 +10,7 @@ import {
 } from "lucide-react";
 import { UploadForm } from "@/components/ingestion/upload-form";
 import { ReclassifyButton } from "@/components/ingestion/reclassify-button";
+import { ConfidenceDisclaimer } from "@/components/ui/confidence-disclaimer";
 
 function formatNumber(n: number) {
   return new Intl.NumberFormat("en-US").format(n);
@@ -204,6 +205,45 @@ export default async function IngestionPage() {
           devices provide limited endpoint visibility — detection relies on DNS,
           SSO, and proxy signals.
         </p>
+      </div>
+
+      {/* Source-specific notes */}
+      <div className="mt-4 space-y-3">
+        <h3 className="text-sm font-semibold text-slate-900">
+          Source Capabilities &amp; Limitations
+        </h3>
+        <div className="space-y-2">
+          <ConfidenceDisclaimer
+            compact
+            level="high"
+            message="DNS Logs: Identifies which domains devices connect to. Cannot determine specific pages visited or data submitted. High coverage across all device types."
+          />
+          <ConfidenceDisclaimer
+            compact
+            level="high"
+            message="SSO Logs: Confirms authenticated app access with user identity. Limited to apps integrated with district SSO. High confidence when available."
+          />
+          <ConfidenceDisclaimer
+            compact
+            level="medium"
+            message="Browser Telemetry: Provides URL-level detail and page titles. Only available on managed browsers (Chrome on Chromebooks/Macs). Not available on iOS Safari."
+          />
+          <ConfidenceDisclaimer
+            compact
+            level="medium"
+            message="LMS Launch: Confirms app usage initiated from the learning management system. Limited to LMS-integrated tools."
+          />
+          <ConfidenceDisclaimer
+            compact
+            level="medium"
+            message="MDM Inventory: Lists installed apps on managed devices. Does not indicate actual usage frequency. Available for all managed device types."
+          />
+          <ConfidenceDisclaimer
+            compact
+            level="low"
+            message="CSV Upload / Manual Entry: Data quality depends on the source. No automated validation. Treat as supplementary evidence."
+          />
+        </div>
       </div>
     </div>
   );

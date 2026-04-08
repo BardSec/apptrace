@@ -2,7 +2,13 @@ export const dynamic = "force-dynamic";
 import { prisma } from "@/lib/prisma";
 import { notFound } from "next/navigation";
 import Link from "next/link";
-import { formatDistanceToNow, format } from "date-fns";
+import {
+  formatDistanceToNow,
+  format,
+  startOfWeek,
+  startOfMonth,
+  differenceInDays,
+} from "date-fns";
 import {
   ArrowLeft,
   Eye,
@@ -15,8 +21,11 @@ import {
   ExternalLink,
   AlertTriangle,
   Info,
+  BarChart3,
+  GraduationCap,
 } from "lucide-react";
 import { AppActions } from "@/components/apps/app-actions";
+import { ConfidenceDisclaimer } from "@/components/ui/confidence-disclaimer";
 
 function formatNumber(n: number) {
   return new Intl.NumberFormat("en-US").format(n);
@@ -91,6 +100,49 @@ function riskGauge(score: number) {
   );
 }
 
+function getConfidenceLevel(
+  confidence: number
+): "high" | "medium" | "low" {
+  if (confidence > 0.8) return "high";
+  if (confidence >= 0.4) return "medium";
+  return "low";
+}
+
+function getGradeBand(gradeName: string): string {
+  const name = gradeName.toLowerCase().trim();
+  if (
+    name === "k" ||
+    name === "kindergarten" ||
+    name === "1" ||
+    name === "1st" ||
+    name === "2" ||
+    name === "2nd"
+  ) {
+    return "K-2";
+  }
+  if (
+    name === "3" ||
+    name === "3rd" ||
+    name === "4" ||
+    name === "4th" ||
+    name === "5" ||
+    name === "5th"
+  ) {
+    return "3-5";
+  }
+  if (
+    name === "6" ||
+    name === "6th" ||
+    name === "7" ||
+    name === "7th" ||
+    name === "8" ||
+    name === "8th"
+  ) {
+    return "6-8";
+  }
+  return "9-12";
+}
+
 export default async function AppDetailPage({
   params,
 }: {
@@ -152,6 +204,158 @@ export default async function AppDetailPage({
     select: { id: true, name: true },
   });
   const schoolMap = new Map(schools.map((s) => [s.id, s.name]));
+
+  // ── Usage by School (aggregate) ──
+  const schoolUsageData = await Promise.all(
+    schoolIds.map(async (schoolId) => {
+      const [studentCount, deviceCount, obsCount, lastObs] = await Promise.all([
+        prisma.observation.findMany({
+          where: { webAppId: app.id, schoolId, studentId: { not: null } },
+          select: { studentId: true },
+          distinct: ["studentId"],
+        }),
+        prisma.observation.findMany({
+          where: { webAppId: app.id, schoolId, deviceId: { not: null } },
+          select: { deviceId: true },
+          distinct: ["deviceId"],
+        }),
+        prisma.observation.count({ where: { webAppId: app.id, schoolId } }),
+        prisma.observation.findFirst({
+          where: { webAppId: app.id, schoolId },
+          orderBy: { timestamp: "desc" },
+          select: { timestamp: true },
+        }),
+      ]);
+      return {
+        schoolId,
+        schoolName: schoolMap.get(schoolId) ?? "Unknown School",
+        studentCount: studentCount.length,
+        deviceCount: deviceCount.length,
+        observationCount: obsCount,
+        lastSeen: lastObs?.timestamp ?? null,
+      };
+    })
+  );
+
+  // ── Usage by Grade Band (aggregate) ──
+  // Get students who have observations for this app
+  const studentObservations = await prisma.observation.findMany({
+    where: { webAppId: app.id, studentId: { not: null } },
+    select: { studentId: true },
+    distinct: ["studentId"],
+  });
+  const studentIds = studentObservations
+    .map((o) => o.studentId)
+    .filter((id): id is string => id !== null);
+
+  // Get grade levels for these students
+  const studentGradeLevels = await prisma.studentGradeLevel.findMany({
+    where: { studentId: { in: studentIds } },
+    include: { gradeLevel: true },
+  });
+
+  // Group by grade band
+  const gradeBandMap: Record<
+    string,
+    { students: Set<string>; observations: number }
+  > = {
+    "K-2": { students: new Set(), observations: 0 },
+    "3-5": { students: new Set(), observations: 0 },
+    "6-8": { students: new Set(), observations: 0 },
+    "9-12": { students: new Set(), observations: 0 },
+  };
+
+  const studentToBands = new Map<string, string[]>();
+  for (const sgl of studentGradeLevels) {
+    const band = getGradeBand(sgl.gradeLevel.name);
+    gradeBandMap[band].students.add(sgl.studentId);
+    const existing = studentToBands.get(sgl.studentId) ?? [];
+    existing.push(band);
+    studentToBands.set(sgl.studentId, existing);
+  }
+
+  // Count observations per grade band
+  const studentObsCounts = await prisma.observation.groupBy({
+    by: ["studentId"],
+    where: { webAppId: app.id, studentId: { in: studentIds } },
+    _count: { id: true },
+  });
+
+  for (const soc of studentObsCounts) {
+    if (!soc.studentId) continue;
+    const bands = studentToBands.get(soc.studentId) ?? [];
+    for (const band of bands) {
+      if (gradeBandMap[band]) {
+        gradeBandMap[band].observations += soc._count.id;
+      }
+    }
+  }
+
+  const gradeBandData = Object.entries(gradeBandMap)
+    .map(([band, data]) => ({
+      band,
+      studentCount: data.students.size,
+      observationCount: data.observations,
+    }))
+    .filter((d) => d.studentCount > 0 || d.observationCount > 0);
+
+  // ── Observation Timeline ──
+  const allObservations = await prisma.observation.findMany({
+    where: { webAppId: app.id },
+    select: { timestamp: true },
+    orderBy: { timestamp: "asc" },
+  });
+
+  let timelineData: { label: string; count: number }[] = [];
+  if (allObservations.length > 0) {
+    const firstDate = new Date(allObservations[0].timestamp);
+    const lastDate = new Date(
+      allObservations[allObservations.length - 1].timestamp
+    );
+    const daySpan = differenceInDays(lastDate, firstDate);
+
+    if (daySpan > 90) {
+      // Group by month
+      const monthBuckets = new Map<string, number>();
+      for (const obs of allObservations) {
+        const d = new Date(obs.timestamp);
+        const key = format(startOfMonth(d), "yyyy-MM");
+        monthBuckets.set(key, (monthBuckets.get(key) ?? 0) + 1);
+      }
+      timelineData = Array.from(monthBuckets.entries())
+        .sort(([a], [b]) => a.localeCompare(b))
+        .map(([key, count]) => ({
+          label: format(new Date(key + "-01"), "MMMM yyyy"),
+          count,
+        }));
+    } else {
+      // Group by week
+      const weekBuckets = new Map<string, number>();
+      for (const obs of allObservations) {
+        const d = new Date(obs.timestamp);
+        const weekStart = startOfWeek(d, { weekStartsOn: 1 });
+        const key = format(weekStart, "yyyy-MM-dd");
+        weekBuckets.set(key, (weekBuckets.get(key) ?? 0) + 1);
+      }
+      timelineData = Array.from(weekBuckets.entries())
+        .sort(([a], [b]) => a.localeCompare(b))
+        .map(([key, count]) => ({
+          label: `Week of ${format(new Date(key), "MMM d")}`,
+          count,
+        }));
+    }
+  }
+
+  const maxTimelineCount =
+    timelineData.length > 0
+      ? Math.max(...timelineData.map((d) => d.count))
+      : 1;
+
+  // Determine confidence level and sources for disclaimer
+  const confidenceLevel = getConfidenceLevel(app.dataConfidence);
+  const sourceTypes = observationsBySource.map((s) =>
+    s.sourceType.replace(/_/g, " ")
+  );
 
   return (
     <div className="p-6">
@@ -246,6 +450,14 @@ export default async function AppDetailPage({
                 : "N/A"}
             </p>
           </div>
+        </div>
+
+        {/* Confidence disclaimer */}
+        <div className="mt-4">
+          <ConfidenceDisclaimer
+            level={confidenceLevel}
+            sources={sourceTypes}
+          />
         </div>
 
         {/* Data collection assessment */}
@@ -629,13 +841,175 @@ export default async function AppDetailPage({
           </div>
         </div>
 
-        <div className="mt-3 flex items-start gap-2 rounded-lg border border-blue-100 bg-blue-50 p-3">
-          <Info className="mt-0.5 h-4 w-4 flex-shrink-0 text-blue-500" />
-          <p className="text-xs text-blue-700">
-            Based on DNS and SSO activity. Browser-level confirmation limited on
-            iOS. Detection relies on DNS, SSO, and proxy signals.
-          </p>
+        <div className="mt-3">
+          <ConfidenceDisclaimer
+            compact
+            level="medium"
+            message={`Observation data sourced from ${sourceTypes.length > 0 ? sourceTypes.join(", ") : "network telemetry"}. Full URL-level detail is not available from DNS logs. Per-app activity on iOS is inferred, not directly observed.`}
+          />
         </div>
+      </div>
+
+      {/* Usage by School (aggregate) */}
+      <div className="mb-6">
+        <h2 className="mb-3 flex items-center gap-2 text-lg font-semibold text-slate-900">
+          <School className="h-5 w-5 text-slate-600" />
+          Usage by School
+        </h2>
+        {schoolUsageData.length > 0 ? (
+          <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white">
+            <table className="w-full text-left text-sm">
+              <thead>
+                <tr className="border-b border-slate-200 bg-slate-50">
+                  <th className="px-4 py-3 font-medium text-slate-600">
+                    School Name
+                  </th>
+                  <th className="px-4 py-3 text-right font-medium text-slate-600">
+                    Students
+                  </th>
+                  <th className="px-4 py-3 text-right font-medium text-slate-600">
+                    Devices
+                  </th>
+                  <th className="px-4 py-3 text-right font-medium text-slate-600">
+                    Observations
+                  </th>
+                  <th className="px-4 py-3 font-medium text-slate-600">
+                    Last Seen
+                  </th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {schoolUsageData.map((row) => (
+                  <tr
+                    key={row.schoolId}
+                    className="transition-colors hover:bg-slate-50"
+                  >
+                    <td className="px-4 py-3 font-medium text-slate-900">
+                      {row.schoolName}
+                    </td>
+                    <td className="px-4 py-3 text-right text-slate-700">
+                      {formatNumber(row.studentCount)}
+                    </td>
+                    <td className="px-4 py-3 text-right text-slate-700">
+                      {formatNumber(row.deviceCount)}
+                    </td>
+                    <td className="px-4 py-3 text-right text-slate-700">
+                      {formatNumber(row.observationCount)}
+                    </td>
+                    <td className="px-4 py-3 text-slate-500">
+                      {row.lastSeen
+                        ? formatDistanceToNow(new Date(row.lastSeen), {
+                            addSuffix: true,
+                          })
+                        : "N/A"}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : (
+          <p className="rounded-lg border border-slate-200 bg-white px-5 py-8 text-center text-sm text-slate-400">
+            No school-level usage data available.
+          </p>
+        )}
+      </div>
+
+      {/* Usage by Grade Band (aggregate) */}
+      <div className="mb-6">
+        <h2 className="mb-3 flex items-center gap-2 text-lg font-semibold text-slate-900">
+          <GraduationCap className="h-5 w-5 text-slate-600" />
+          Usage by Grade Band
+        </h2>
+        {gradeBandData.length > 0 ? (
+          <>
+            <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white">
+              <table className="w-full text-left text-sm">
+                <thead>
+                  <tr className="border-b border-slate-200 bg-slate-50">
+                    <th className="px-4 py-3 font-medium text-slate-600">
+                      Grade Band
+                    </th>
+                    <th className="px-4 py-3 text-right font-medium text-slate-600">
+                      Students
+                    </th>
+                    <th className="px-4 py-3 text-right font-medium text-slate-600">
+                      Observations
+                    </th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {gradeBandData.map((row) => (
+                    <tr
+                      key={row.band}
+                      className="transition-colors hover:bg-slate-50"
+                    >
+                      <td className="px-4 py-3 font-medium text-slate-900">
+                        {row.band}
+                      </td>
+                      <td className="px-4 py-3 text-right text-slate-700">
+                        {formatNumber(row.studentCount)}
+                      </td>
+                      <td className="px-4 py-3 text-right text-slate-700">
+                        {formatNumber(row.observationCount)}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <div className="mt-3">
+              <ConfidenceDisclaimer
+                compact
+                level="medium"
+                message="Grade-level data derived from student enrollment records linked to network observations."
+              />
+            </div>
+          </>
+        ) : (
+          <p className="rounded-lg border border-slate-200 bg-white px-5 py-8 text-center text-sm text-slate-400">
+            No grade-level data available for this app.
+          </p>
+        )}
+      </div>
+
+      {/* Observation Timeline */}
+      <div className="mb-6">
+        <h2 className="mb-3 flex items-center gap-2 text-lg font-semibold text-slate-900">
+          <BarChart3 className="h-5 w-5 text-slate-600" />
+          Observation Timeline
+        </h2>
+        {timelineData.length > 0 ? (
+          <div className="rounded-lg border border-slate-200 bg-white p-5">
+            <div className="space-y-2">
+              {timelineData.map((row) => (
+                <div key={row.label} className="flex items-center gap-3">
+                  <span className="w-36 flex-shrink-0 text-right text-xs text-slate-500">
+                    {row.label}
+                  </span>
+                  <div className="flex-1">
+                    <div
+                      className="h-5 rounded bg-indigo-500 transition-all"
+                      style={{
+                        width: `${Math.max(
+                          (row.count / maxTimelineCount) * 100,
+                          2
+                        )}%`,
+                      }}
+                    />
+                  </div>
+                  <span className="w-16 text-right text-xs font-medium text-slate-700">
+                    {formatNumber(row.count)}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
+        ) : (
+          <p className="rounded-lg border border-slate-200 bg-white px-5 py-8 text-center text-sm text-slate-400">
+            No observation timeline data available.
+          </p>
+        )}
       </div>
     </div>
   );

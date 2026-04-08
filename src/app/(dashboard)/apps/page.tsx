@@ -3,7 +3,8 @@ import { prisma } from "@/lib/prisma";
 import { Prisma } from "@prisma/client";
 import Link from "next/link";
 import { formatDistanceToNow } from "date-fns";
-import { Search, Filter, CheckCircle, XCircle, HelpCircle } from "lucide-react";
+import { CheckCircle, XCircle, HelpCircle } from "lucide-react";
+import { AppFilters } from "@/components/apps/app-filters";
 
 function formatNumber(n: number) {
   return new Intl.NumberFormat("en-US").format(n);
@@ -85,9 +86,19 @@ const STATUSES = [
 export default async function AppsPage({
   searchParams,
 }: {
-  searchParams: { q?: string; category?: string; status?: string; risk?: string };
+  searchParams: {
+    q?: string;
+    category?: string;
+    status?: string;
+    risk?: string;
+    lastSeen?: string;
+    vendor?: string;
+    collectsData?: string;
+    sort?: string;
+  };
 }) {
-  const { q, category, status, risk } = searchParams;
+  const { q, category, status, risk, lastSeen, vendor, collectsData, sort } =
+    searchParams;
 
   const where: Prisma.WebAppWhereInput = {};
 
@@ -114,14 +125,67 @@ export default async function AppsPage({
     where.riskScore = { lte: 30 };
   }
 
-  const apps = await prisma.webApp.findMany({
-    where,
-    orderBy: { riskScore: "desc" },
-    include: {
-      vendor: true,
-      _count: { select: { observations: true } },
-    },
-  });
+  // Last seen filter
+  if (lastSeen && lastSeen !== "all") {
+    const now = new Date();
+    let daysAgo = 90;
+    if (lastSeen === "7d") daysAgo = 7;
+    else if (lastSeen === "30d") daysAgo = 30;
+    else if (lastSeen === "90d") daysAgo = 90;
+    const cutoff = new Date(now.getTime() - daysAgo * 24 * 60 * 60 * 1000);
+    where.lastSeenAt = { gte: cutoff };
+  }
+
+  // Vendor filter
+  if (vendor) {
+    where.vendorId = vendor;
+  }
+
+  // Collects data filter
+  if (
+    collectsData &&
+    ["YES", "NO", "UNKNOWN"].includes(collectsData)
+  ) {
+    where.collectsData =
+      collectsData as Prisma.EnumDataCollectionLikelihoodFilter;
+  }
+
+  // Sort
+  let orderBy: Prisma.WebAppOrderByWithRelationInput;
+  switch (sort) {
+    case "name":
+      orderBy = { name: "asc" };
+      break;
+    case "lastSeen":
+      orderBy = { lastSeenAt: "desc" };
+      break;
+    case "observations":
+      orderBy = { totalObservations: "desc" };
+      break;
+    case "confidence":
+      orderBy = { dataConfidence: "desc" };
+      break;
+    case "risk":
+    default:
+      orderBy = { riskScore: "desc" };
+      break;
+  }
+
+  const [apps, totalCount, vendors] = await Promise.all([
+    prisma.webApp.findMany({
+      where,
+      orderBy,
+      include: {
+        vendor: true,
+        _count: { select: { observations: true } },
+      },
+    }),
+    prisma.webApp.count(),
+    prisma.vendor.findMany({
+      select: { id: true, name: true },
+      orderBy: { name: "asc" },
+    }),
+  ]);
 
   return (
     <div className="p-6">
@@ -133,99 +197,11 @@ export default async function AppsPage({
       </div>
 
       {/* Filters */}
-      <div className="mb-6 rounded-lg border border-slate-200 bg-white p-4">
-        <form className="flex flex-wrap items-end gap-4">
-          <div className="min-w-[200px] flex-1">
-            <label className="mb-1 block text-xs font-medium text-slate-600">
-              Search
-            </label>
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-              <input
-                type="text"
-                name="q"
-                defaultValue={q ?? ""}
-                placeholder="Search apps or domains..."
-                className="w-full rounded-md border border-slate-300 py-2 pl-9 pr-3 text-sm text-slate-900 placeholder:text-slate-400 focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
-              />
-            </div>
-          </div>
-
-          <div>
-            <label className="mb-1 block text-xs font-medium text-slate-600">
-              Category
-            </label>
-            <select
-              name="category"
-              defaultValue={category ?? ""}
-              className="rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
-            >
-              <option value="">All Categories</option>
-              {CATEGORIES.map((c) => (
-                <option key={c} value={c}>
-                  {c.replace(/_/g, " ")}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          <div>
-            <label className="mb-1 block text-xs font-medium text-slate-600">
-              Status
-            </label>
-            <select
-              name="status"
-              defaultValue={status ?? ""}
-              className="rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
-            >
-              <option value="">All Statuses</option>
-              {STATUSES.map((s) => (
-                <option key={s} value={s}>
-                  {s.replace(/_/g, " ")}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          <div>
-            <label className="mb-1 block text-xs font-medium text-slate-600">
-              Risk Level
-            </label>
-            <select
-              name="risk"
-              defaultValue={risk ?? ""}
-              className="rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
-            >
-              <option value="">All Levels</option>
-              <option value="high">High (&gt;60)</option>
-              <option value="medium">Medium (30-60)</option>
-              <option value="low">Low (&lt;30)</option>
-            </select>
-          </div>
-
-          <button
-            type="submit"
-            className="inline-flex items-center gap-2 rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2"
-          >
-            <Filter className="h-4 w-4" />
-            Filter
-          </button>
-
-          {(q || category || status || risk) && (
-            <Link
-              href="/apps"
-              className="inline-flex items-center rounded-md px-3 py-2 text-sm font-medium text-slate-600 hover:text-slate-900"
-            >
-              Clear
-            </Link>
-          )}
-        </form>
-      </div>
-
-      {/* Results count */}
-      <p className="mb-3 text-sm text-slate-500">
-        {formatNumber(apps.length)} app{apps.length !== 1 ? "s" : ""} found
-      </p>
+      <AppFilters
+        vendors={vendors}
+        totalCount={totalCount}
+        filteredCount={apps.length}
+      />
 
       {/* Table */}
       <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white">

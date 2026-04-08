@@ -10,6 +10,7 @@ import {
   ArrowRight,
 } from "lucide-react";
 import { QuickActions } from "@/components/review/quick-actions";
+import { ConfidenceDisclaimer } from "@/components/ui/confidence-disclaimer";
 
 function formatNumber(n: number) {
   return new Intl.NumberFormat("en-US").format(n);
@@ -79,6 +80,14 @@ export default async function ReviewPage() {
         <p className="mt-1 text-sm text-slate-500">
           Applications pending privacy and compliance review, sorted by risk.
         </p>
+      </div>
+
+      {/* Confidence disclaimer */}
+      <div className="mb-6">
+        <ConfidenceDisclaimer
+          level="medium"
+          message="Risk scores and data collection assessments are probabilistic. Review each app's evidence before making approval decisions."
+        />
       </div>
 
       {/* Summary cards */}

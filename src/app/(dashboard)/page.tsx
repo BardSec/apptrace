@@ -9,6 +9,7 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { formatDistanceToNow } from "date-fns";
+import { ConfidenceDisclaimer } from "@/components/ui/confidence-disclaimer";
 
 function formatNumber(n: number) {
   return new Intl.NumberFormat("en-US").format(n);
@@ -173,6 +174,15 @@ export default async function DashboardPage() {
             </div>
           );
         })}
+      </div>
+
+      {/* Confidence disclaimer */}
+      <div className="mb-6">
+        <ConfidenceDisclaimer
+          compact
+          level="medium"
+          message="App detection is based on network telemetry (DNS, SSO, proxy logs). iOS devices provide limited endpoint visibility. All assessments are probabilistic."
+        />
       </div>
 
       {/* Two columns */}
