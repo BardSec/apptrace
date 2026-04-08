@@ -1,0 +1,320 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─── Enums ───────────────────────────────────────────────────────────
+
+enum DeviceType {
+  IPAD
+  MACBOOK
+  CHROMEBOOK
+  OTHER
+}
+
+enum AppCategory {
+  LMS
+  ASSESSMENT
+  COMMUNICATION
+  PRODUCTIVITY
+  CREATIVE
+  REFERENCE
+  SOCIAL_MEDIA
+  VIDEO
+  GAMING
+  UTILITY
+  SSO_IDP
+  CDN_INFRASTRUCTURE
+  ANALYTICS
+  ADVERTISING
+  UNKNOWN
+}
+
+enum ApprovalStatus {
+  APPROVED
+  PENDING_REVIEW
+  RESTRICTED
+  BLOCKED
+  UNKNOWN
+}
+
+enum DataCollectionLikelihood {
+  YES
+  NO
+  UNKNOWN
+}
+
+enum DomainType {
+  APP
+  LOGIN
+  CDN
+  STATIC
+  API
+  TRACKING
+  UNKNOWN
+}
+
+enum IntegrationSourceType {
+  DNS_LOG
+  BROWSER_TELEMETRY
+  SSO_LOG
+  LMS_LAUNCH
+  MDM_INVENTORY
+  CSV_UPLOAD
+  MANUAL_ENTRY
+  MOCK
+}
+
+enum DataCategory {
+  NAME
+  EMAIL
+  STUDENT_ID
+  CLASS_ENROLLMENT
+  ASSIGNMENT_CONTENT
+  BEHAVIORAL_ACTIVITY
+  DEVICE_IDENTIFIERS
+  LOCATION
+  PHOTOS
+  AUDIO_VIDEO
+  PARENT_CONTACT
+  UNKNOWN
+}
+
+// ─── Models ──────────────────────────────────────────────────────────
+
+model School {
+  id        String   @id @default(cuid())
+  name      String
+  shortCode String   @unique
+  address   String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  students     Student[]
+  devices      Device[]
+  observations Observation[]
+
+  @@index([shortCode])
+}
+
+model GradeLevel {
+  id        String @id @default(cuid())
+  name      String @unique
+  sortOrder Int
+
+  students StudentGradeLevel[]
+
+  @@index([sortOrder])
+}
+
+model Student {
+  id                String   @id @default(cuid())
+  districtStudentId String   @unique
+  firstName         String
+  lastName          String
+  email             String?
+  schoolId          String
+  createdAt         DateTime @default(now())
+
+  school       School              @relation(fields: [schoolId], references: [id])
+  gradeLevels  StudentGradeLevel[]
+  devices      Device[]
+  observations Observation[]
+
+  @@index([schoolId])
+  @@index([districtStudentId])
+  @@index([lastName, firstName])
+}
+
+model StudentGradeLevel {
+  studentId    String
+  gradeLevelId String
+
+  student    Student    @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  gradeLevel GradeLevel @relation(fields: [gradeLevelId], references: [id], onDelete: Cascade)
+
+  @@id([studentId, gradeLevelId])
+  @@index([gradeLevelId])
+}
+
+model Device {
+  id           String     @id @default(cuid())
+  serialNumber String     @unique
+  deviceType   DeviceType
+  modelName    String?
+  osVersion    String?
+  mdmManaged   Boolean    @default(true)
+  studentId    String?
+  schoolId     String
+  createdAt    DateTime   @default(now())
+
+  student      Student?      @relation(fields: [studentId], references: [id], onDelete: SetNull)
+  school       School        @relation(fields: [schoolId], references: [id])
+  observations Observation[]
+
+  @@index([serialNumber])
+  @@index([schoolId])
+  @@index([studentId])
+  @@index([deviceType])
+}
+
+model Vendor {
+  id                      String   @id @default(cuid())
+  name                    String   @unique
+  website                 String?
+  headquartersCountry     String?
+  hasStudentPrivacyPolicy Boolean  @default(false)
+  coppaCompliant          Boolean?
+  ferpaCompliant          Boolean?
+  notes                   String?
+  createdAt               DateTime @default(now())
+  updatedAt               DateTime @updatedAt
+
+  webApps WebApp[]
+
+  @@index([name])
+}
+
+model WebApp {
+  id                String                  @id @default(cuid())
+  name              String
+  primaryDomain     String
+  vendorId          String?
+  description       String?
+  category          AppCategory             @default(UNKNOWN)
+  approvalStatus    ApprovalStatus          @default(UNKNOWN)
+  riskScore         Float                   @default(0)
+  collectsData      DataCollectionLikelihood @default(UNKNOWN)
+  dataConfidence    Float                   @default(0)
+  lastSeenAt        DateTime?
+  firstSeenAt       DateTime?
+  totalObservations Int                     @default(0)
+  createdAt         DateTime                @default(now())
+  updatedAt         DateTime                @updatedAt
+
+  vendor               Vendor?                @relation(fields: [vendorId], references: [id], onDelete: SetNull)
+  domainAliases        DomainAlias[]
+  observations         Observation[]
+  dataCollectionSignals DataCollectionSignal[]
+  privacyReviews       PrivacyReview[]
+  evidenceArtifacts    EvidenceArtifact[]
+  dataCategories       WebAppDataCategory[]
+
+  @@index([primaryDomain])
+  @@index([approvalStatus])
+  @@index([category])
+  @@index([vendorId])
+  @@index([riskScore])
+  @@index([lastSeenAt])
+}
+
+model DomainAlias {
+  id         String     @id @default(cuid())
+  domain     String     @unique
+  webAppId   String
+  isCanonical Boolean   @default(false)
+  isPrimary  Boolean    @default(false)
+  domainType DomainType @default(UNKNOWN)
+  createdAt  DateTime   @default(now())
+
+  webApp WebApp @relation(fields: [webAppId], references: [id], onDelete: Cascade)
+
+  @@index([domain])
+  @@index([webAppId])
+}
+
+model Observation {
+  id                 String              @id @default(cuid())
+  timestamp          DateTime
+  domain             String
+  fullUrl            String?
+  studentId          String?
+  deviceId           String?
+  schoolId           String?
+  webAppId           String?
+  sourceType         IntegrationSourceType
+  rawData            Json?
+  sessionDurationSec Int?
+  createdAt          DateTime            @default(now())
+
+  student Student? @relation(fields: [studentId], references: [id], onDelete: SetNull)
+  device  Device?  @relation(fields: [deviceId], references: [id], onDelete: SetNull)
+  school  School?  @relation(fields: [schoolId], references: [id], onDelete: SetNull)
+  webApp  WebApp?  @relation(fields: [webAppId], references: [id], onDelete: SetNull)
+
+  @@index([timestamp])
+  @@index([domain])
+  @@index([studentId])
+  @@index([deviceId])
+  @@index([schoolId])
+  @@index([webAppId])
+  @@index([sourceType])
+  @@index([timestamp, schoolId])
+}
+
+model DataCollectionSignal {
+  id         String              @id @default(cuid())
+  webAppId   String
+  signalType String
+  confidence Float
+  evidence   String
+  detectedAt DateTime
+  sourceType IntegrationSourceType
+  createdAt  DateTime            @default(now())
+
+  webApp WebApp @relation(fields: [webAppId], references: [id], onDelete: Cascade)
+
+  @@index([webAppId])
+  @@index([signalType])
+}
+
+model WebAppDataCategory {
+  webAppId     String
+  dataCategory DataCategory
+  confidence   Float
+  evidence     String
+
+  webApp WebApp @relation(fields: [webAppId], references: [id], onDelete: Cascade)
+
+  @@id([webAppId, dataCategory])
+  @@index([dataCategory])
+}
+
+model PrivacyReview {
+  id                String         @id @default(cuid())
+  webAppId          String
+  reviewerName      String
+  status            ApprovalStatus
+  notes             String?
+  riskAssessment    String?
+  recommendedAction String?
+  reviewedAt        DateTime
+  createdAt         DateTime       @default(now())
+  updatedAt         DateTime       @updatedAt
+
+  webApp WebApp @relation(fields: [webAppId], references: [id], onDelete: Cascade)
+
+  @@index([webAppId])
+  @@index([status])
+}
+
+model EvidenceArtifact {
+  id           String   @id @default(cuid())
+  webAppId     String
+  artifactType String
+  title        String
+  description  String?
+  url          String?
+  content      String?  @db.Text
+  capturedAt   DateTime
+  createdAt    DateTime @default(now())
+
+  webApp WebApp @relation(fields: [webAppId], references: [id], onDelete: Cascade)
+
+  @@index([webAppId])
+  @@index([artifactType])
+}
